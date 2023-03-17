@@ -73,7 +73,7 @@ my.company.registry":
 		}
 	}
 
-	if err := config.ValidateClusterConfig(ctx, runtimes.SelectedRuntime, *clusterConfig); err != nil {
+	if err = config.ValidateClusterConfig(ctx, runtimes.SelectedRuntime, *clusterConfig); err != nil {
 		if err != nil {
 			return nil, err
 		}
