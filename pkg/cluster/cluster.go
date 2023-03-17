@@ -11,8 +11,6 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha4"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
 	"github.com/k3d-io/k3d/v5/pkg/types"
-	"github.com/k3d-io/k3d/v5/version"
-
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -21,9 +19,9 @@ type Cluster interface {
 }
 
 type K3dCluster struct {
-	kubeConfig       *api.Config
 	containerRuntime runtimes.Runtime
 	clusterConfig    *v1alpha4.ClusterConfig
+	kubeConfig       *api.Config
 }
 
 func createClusterConfig(ctx context.Context) (*v1alpha4.ClusterConfig, error) {
@@ -40,7 +38,7 @@ my.company.registry":
 		ObjectMeta: configTypes.ObjectMeta{
 			Name: "to-be-generated",
 		},
-		Image:   fmt.Sprintf("%s:%s", types.DefaultK3sImageRepo, version.K3sVersion),
+		// Image:   fmt.Sprintf("%s:%s", types.DefaultK3sImageRepo, version.K3sVersion),
 		Servers: 1,
 		Agents:  0,
 		Options: v1alpha4.SimpleConfigOptions{
@@ -97,26 +95,36 @@ my.company.registry":
 func CreateK3dCluster(ctx context.Context) (*K3dCluster, error) {
 	containerRuntime := runtimes.SelectedRuntime
 
-	clusterConfig, err := createClusterConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = client.ClusterRun(ctx, containerRuntime, clusterConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	kubeConfig, err := client.KubeconfigGet(ctx, containerRuntime, &clusterConfig.Cluster)
-	if err != nil {
-		return nil, err
-	}
-
-	return &K3dCluster{
-		kubeConfig:       kubeConfig,
+	cluster := &K3dCluster{
 		containerRuntime: containerRuntime,
-		clusterConfig:    clusterConfig,
-	}, nil
+	}
+
+	var err error
+	cluster.clusterConfig, err = createClusterConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = client.ClusterRun(ctx, containerRuntime, cluster.clusterConfig)
+	if err != nil {
+		return cluster, handleStartError(ctx, cluster, err)
+	}
+
+	cluster.kubeConfig, err = client.KubeconfigGet(ctx, containerRuntime, &cluster.clusterConfig.Cluster)
+	if err != nil {
+		return cluster, handleStartError(ctx, cluster, err)
+	}
+
+	return cluster, nil
+}
+
+func handleStartError(ctx context.Context, cluster *K3dCluster, err error) error {
+	err2 := cluster.Terminate(ctx)
+	if err2 != nil {
+		fmt.Printf("Another error '%s' occurred during an error: %s", err2.Error(), err)
+	}
+
+	return err
 }
 
 func (c *K3dCluster) Terminate(ctx context.Context) error {
