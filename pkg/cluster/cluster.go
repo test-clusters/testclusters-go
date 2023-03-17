@@ -45,6 +45,19 @@ func createClusterConfig(ctx context.Context) (*v1alpha4.ClusterConfig, error) {
 		return nil, err
 	}
 
+	clusterConfig, err = config.ProcessClusterConfig(*clusterConfig)
+	if err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := config.ValidateClusterConfig(ctx, runtimes.SelectedRuntime, *clusterConfig); err != nil {
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return clusterConfig, nil
 }
 
