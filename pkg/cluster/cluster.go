@@ -9,6 +9,7 @@ import (
 	configTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha4"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
+	"github.com/k3d-io/k3d/v5/pkg/types"
 
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -22,6 +23,11 @@ type K3dCluster struct {
 }
 
 func createClusterConfig(ctx context.Context) (*v1alpha4.ClusterConfig, error) {
+	k3sRegistryYaml := `
+my.company.registry":
+  endpoint:
+  - http://my.company.registry:5000
+`
 	simpleConfig := v1alpha4.SimpleConfig{
 		TypeMeta: configTypes.TypeMeta{
 			Kind:       "Simple",
@@ -37,6 +43,21 @@ func createClusterConfig(ctx context.Context) (*v1alpha4.ClusterConfig, error) {
 				Wait:    true,
 				Timeout: 60 * time.Second,
 			},
+		},
+		// allows unpublished images-under-test to be used in the cluster
+		Registries: v1alpha4.SimpleConfigRegistries{
+			Create: &v1alpha4.SimpleConfigRegistryCreateConfig{
+				// Name:	fmt.Sprintf("%s-%s-registry", k3d.DefaultObjectNamePrefix, newCluster.Name),
+				// Host:    "0.0.0.0",
+				HostPort: types.DefaultRegistryPort, // alternatively the string "random"
+				// Image:   fmt.Sprintf("%s:%s", k3d.DefaultRegistryImageRepo, k3d.DefaultRegistryImageTag),
+				Proxy: types.RegistryProxy{
+					RemoteURL: "https://registry-1.docker.io",
+					Username:  "",
+					Password:  "",
+				},
+			},
+			Config: k3sRegistryYaml,
 		},
 	}
 
