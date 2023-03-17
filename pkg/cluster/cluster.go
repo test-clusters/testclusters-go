@@ -10,8 +10,21 @@ import (
 	configTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha4"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
-	"github.com/k3d-io/k3d/v5/pkg/types"
+	k3dTypes "github.com/k3d-io/k3d/v5/pkg/types"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+)
+
+const appName = "k8s-containers"
+
+// k3s versions
+const (
+	K3sVersion1_26 = "v1.26.2-k3s1"
 )
 
 type Cluster interface {
@@ -38,7 +51,7 @@ my.company.registry":
 		ObjectMeta: configTypes.ObjectMeta{
 			Name: "to-be-generated",
 		},
-		// Image:   fmt.Sprintf("%s:%s", types.DefaultK3sImageRepo, version.K3sVersion),
+		Image:   fmt.Sprintf("%s:%s", k3dTypes.DefaultK3sImageRepo, K3sVersion1_26),
 		Servers: 1,
 		Agents:  0,
 		Options: v1alpha4.SimpleConfigOptions{
@@ -50,11 +63,11 @@ my.company.registry":
 		// allows unpublished images-under-test to be used in the cluster
 		Registries: v1alpha4.SimpleConfigRegistries{
 			Create: &v1alpha4.SimpleConfigRegistryCreateConfig{
-				// Name:	fmt.Sprintf("%s-%s-registry", k3d.DefaultObjectNamePrefix, newCluster.Name),
+				// Name:	fmt.Sprintf("%s-%s-registry", k3dTypes.DefaultObjectNamePrefix, newCluster.Name),
 				// Host:    "0.0.0.0",
-				HostPort: types.DefaultRegistryPort, // alternatively the string "random"
-				// Image:   fmt.Sprintf("%s:%s", k3d.DefaultRegistryImageRepo, k3d.DefaultRegistryImageTag),
-				Proxy: types.RegistryProxy{
+				HostPort: k3dTypes.DefaultRegistryPort, // alternatively the string "random"
+				// Image:    fmt.Sprintf("%s:%s", k3dTypes.DefaultRegistryImageRepo, k3dTypes.DefaultRegistryImageTag),
+				Proxy: k3dTypes.RegistryProxy{
 					RemoteURL: "https://registry-1.docker.io",
 					Username:  "",
 					Password:  "",
@@ -128,10 +141,69 @@ func handleStartError(ctx context.Context, cluster *K3dCluster, err error) error
 }
 
 func (c *K3dCluster) Terminate(ctx context.Context) error {
-	err := client.ClusterDelete(ctx, c.containerRuntime, &c.clusterConfig.Cluster, types.ClusterDeleteOpts{})
+	err := client.ClusterDelete(ctx, c.containerRuntime, &c.clusterConfig.Cluster, k3dTypes.ClusterDeleteOpts{})
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (c *K3dCluster) ClientSet() (*kubernetes.Clientset, error) {
+	intermediateConfig := clientcmd.NewDefaultClientConfig(*c.kubeConfig, nil)
+	clientConfig, err := intermediateConfig.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	clientSet, err := kubernetes.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientSet, nil
+}
+
+func (c *K3dCluster) Kubectl(ctx context.Context) (*KubeCtl, error) {
+	clientSet, err := c.ClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	kubeCtlPod, err := clientSet.CoreV1().Pods("default").Get(ctx, "kubectl", metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if kubeCtlPod == nil {
+		trueish := true
+		kubeCtlPod = &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kubectl-pod",
+				Namespace: "default",
+				Labels:    map[string]string{"k3s.creator": appName},
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{{
+					Name:    "",
+					Image:   "bitnami/kubectl:1.26.2",
+					Command: []string{"sleep infinity"},
+				}},
+				AutomountServiceAccountToken: &trueish,
+			},
+			Status: v1.PodStatus{},
+		}
+
+		kubeCtlPod, err = clientSet.CoreV1().Pods("default").Create(ctx, kubeCtlPod, metav1.CreateOptions{})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	coreV1Client := clientSet.CoreV1().RESTClient()
+
+	return &KubeCtl{
+		pod:             kubeCtlPod,
+		commandExecutor: NewCommandExecutor(clientSet, coreV1Client),
+	}, nil
 }

@@ -14,3 +14,5 @@
 - Enable external access to cluster pods
   - Loadbalancer/ingress testing
   - port forward
+- generate cluster identifiers automatically
+- allow user to choose a custom namespace

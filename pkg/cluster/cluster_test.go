@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	_ "embed"
 	"log"
 	"os"
 	"testing"
@@ -16,7 +17,7 @@ func TestMain(m *testing.M) {
 
 	err := setup(ctx)
 	if err != nil {
-		log.Printf("Unexpected error during test setup: %s.\n", err)
+		log.Printf("Unexpected error during test setup: %s\n", err)
 		return
 	}
 
@@ -24,7 +25,7 @@ func TestMain(m *testing.M) {
 
 	err = tearDown(ctx)
 	if err != nil {
-		log.Printf("Unexpected error during test tear down: %s.\n", err)
+		log.Printf("Unexpected error during test tear down: %s\n", err)
 		return
 	}
 }
@@ -46,6 +47,13 @@ func tearDown(ctx context.Context) error {
 	return nil
 }
 
+//go:embed testdata/simpleNginxDeployment.yaml
+var simpleNginxDeploymentBytes []byte
+
 func TestExample(t *testing.T) {
-	// TODO do sth. with the cluster
+	// kubectl, _ := cluster.Kubectl()
+	// err := kubectl.Apply(simpleNginxDeploymentBytes)
+	// if err != nil {
+	// 	panic("eaassfafarrggh!!!! " + err.Error())
+	// }
 }
