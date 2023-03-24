@@ -4,6 +4,8 @@ go 1.20
 
 require (
 	github.com/k3d-io/k3d/v5 v5.4.9
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
+	github.com/stretchr/testify v1.8.2
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2
 	k8s.io/client-go v0.26.2
@@ -73,6 +75,7 @@ require (
 	github.com/opencontainers/runc v1.1.4 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.39.0 // indirect

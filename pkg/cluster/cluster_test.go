@@ -6,6 +6,9 @@ import (
 	"log"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var cluster *K3dCluster
@@ -13,7 +16,17 @@ var cluster *K3dCluster
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	var exitCode = 1
-	defer func() { os.Exit(exitCode) }()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Unexpected panic during test")
+		}
+		err := tearDown(ctx)
+		if err != nil {
+			log.Printf("Unexpected error during test tear down: %s\n", err)
+			return
+		}
+		os.Exit(exitCode)
+	}()
 
 	err := setup(ctx)
 	if err != nil {
@@ -23,11 +36,6 @@ func TestMain(m *testing.M) {
 
 	exitCode = m.Run()
 
-	err = tearDown(ctx)
-	if err != nil {
-		log.Printf("Unexpected error during test tear down: %s\n", err)
-		return
-	}
 }
 
 func setup(ctx context.Context) error {
@@ -51,9 +59,14 @@ func tearDown(ctx context.Context) error {
 var simpleNginxDeploymentBytes []byte
 
 func TestExample(t *testing.T) {
-	// kubectl, _ := cluster.Kubectl()
-	// err := kubectl.Apply(simpleNginxDeploymentBytes)
-	// if err != nil {
-	// 	panic("eaassfafarrggh!!!! " + err.Error())
-	// }
+	// given
+	ctx := context.Background()
+	kubectl, err := cluster.Kubectl(ctx)
+	require.NoError(t, err)
+
+	// when
+	err = kubectl.ApplyWithFile(ctx, simpleNginxDeploymentBytes)
+
+	// then
+	assert.NoError(t, err)
 }
