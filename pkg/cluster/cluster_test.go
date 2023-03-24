@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 
 func setup(ctx context.Context) error {
 	var err error
-	cluster, err = CreateK3dCluster(ctx)
+	cluster, err = CreateK3dCluster(ctx, "hello-world")
 	if err != nil {
 		return err
 	}

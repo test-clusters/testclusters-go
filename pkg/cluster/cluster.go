@@ -11,6 +11,7 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha4"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/types"
+	"github.com/ppxl/testclusters-go/pkg/naming"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,9 +36,10 @@ type K3dCluster struct {
 	containerRuntime runtimes.Runtime
 	clusterConfig    *v1alpha4.ClusterConfig
 	kubeConfig       *api.Config
+	ClusterName      string
 }
 
-func createClusterConfig(ctx context.Context) (*v1alpha4.ClusterConfig, error) {
+func createClusterConfig(ctx context.Context, clusterName string) (*v1alpha4.ClusterConfig, error) {
 	k3sRegistryYaml := `
 my.company.registry":
   endpoint:
@@ -49,7 +51,7 @@ my.company.registry":
 			APIVersion: "k3d.io/v1alpha4",
 		},
 		ObjectMeta: configTypes.ObjectMeta{
-			Name: "to-be-generated",
+			Name: clusterName,
 		},
 		Image:   fmt.Sprintf("%s:%s", k3dTypes.DefaultK3sImageRepo, K3sVersion1_26),
 		Servers: 1,
@@ -105,15 +107,18 @@ my.company.registry":
 // TODO allow the user to overwrite our ClusterConfig with her own
 // func CreateK3dClusterWithConfig() ...
 
-func CreateK3dCluster(ctx context.Context) (*K3dCluster, error) {
+// CreateK3dCluster creates a completely new K8s cluster with an optional clusterNamePrefix.
+func CreateK3dCluster(ctx context.Context, clusterNamePrefix string) (*K3dCluster, error) {
 	containerRuntime := runtimes.SelectedRuntime
 
+	clusterName := naming.MustGenerateK8sName(clusterNamePrefix)
 	cluster := &K3dCluster{
 		containerRuntime: containerRuntime,
+		ClusterName:      clusterName,
 	}
 
 	var err error
-	cluster.clusterConfig, err = createClusterConfig(ctx)
+	cluster.clusterConfig, err = createClusterConfig(ctx, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +145,7 @@ func handleStartError(ctx context.Context, cluster *K3dCluster, err error) error
 	return err
 }
 
+// Terminate shuts down the configured cluster.
 func (c *K3dCluster) Terminate(ctx context.Context) error {
 	err := client.ClusterDelete(ctx, c.containerRuntime, &c.clusterConfig.Cluster, k3dTypes.ClusterDeleteOpts{})
 	if err != nil {
@@ -149,6 +155,7 @@ func (c *K3dCluster) Terminate(ctx context.Context) error {
 	return nil
 }
 
+// ClientSet returns a K8s clientset which allows to interoperate with the cluster K8s API.
 func (c *K3dCluster) ClientSet() (*kubernetes.Clientset, error) {
 	intermediateConfig := clientcmd.NewDefaultClientConfig(*c.kubeConfig, nil)
 	clientConfig, err := intermediateConfig.ClientConfig()
