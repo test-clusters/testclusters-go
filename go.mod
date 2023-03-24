@@ -1,4 +1,4 @@
-module github.com/ppxl/k8s-container-learning-day-2023
+module github.com/ppxl/testclusters-go
 
 go 1.20
 

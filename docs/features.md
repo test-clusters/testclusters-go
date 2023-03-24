@@ -16,3 +16,4 @@
   - port forward
 - generate cluster identifiers automatically
 - allow user to choose a custom namespace
+- Test framework agnostic
