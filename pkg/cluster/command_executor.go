@@ -3,7 +3,9 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	l "github.com/k3d-io/k3d/v5/pkg/logger"
 	"net/url"
 	"strings"
 	"time"
@@ -162,6 +164,10 @@ func (ce *defaultCommandExecutor) waitForPodToHaveExpectedStatus(ctx context.Con
 }
 
 func podHasStatus(pod *corev1.Pod, expectedPodStatus string) error {
+	l.Log().Info("===== =====")
+	l.Log().Infof("podHasStatus %#v", pod)
+	l.Log().Info("===== =====")
+
 	switch expectedPodStatus {
 	case "started":
 		if pod.Status.Phase == corev1.PodRunning {
@@ -177,12 +183,16 @@ func podHasStatus(pod *corev1.Pod, expectedPodStatus string) error {
 		return fmt.Errorf("unsupported pod status: %s", expectedPodStatus)
 	}
 
+	l.Log().Info("===== =====")
+	l.Log().Infof("expectedPodStatus status %s not fulfilled", expectedPodStatus)
+	l.Log().Info("===== =====")
 	return &TestableRetrierError{Err: fmt.Errorf("expectedPodStatus status %s not fulfilled", expectedPodStatus)}
 }
 
 // TestableRetryFunc returns true if the returned error is a TestableRetrierError and indicates that an action should be tried until the retrier hits its limit.
 var TestableRetryFunc = func(err error) bool {
-	_, ok := err.(*TestableRetrierError)
+	var testableRetrierError *TestableRetrierError
+	ok := errors.As(err, &testableRetrierError)
 	return ok
 }
 

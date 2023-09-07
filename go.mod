@@ -3,6 +3,7 @@ module github.com/ppxl/testclusters-go
 go 1.20
 
 require (
+	github.com/cloudogu/k8s-apply-lib v0.4.2
 	github.com/k3d-io/k3d/v5 v5.4.9
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.2
