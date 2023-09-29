@@ -316,9 +316,16 @@ type Lookout struct {
 	c kubernetes.Interface
 }
 
-func (l *Lookout) Pods(namespace string) *PodSelector {
+func (l *Lookout) Pods(namespace string) *PodListSelector {
+	return &PodListSelector{
+		podClient: l.c.CoreV1().Pods(namespace),
+	}
+}
+
+func (l *Lookout) Pod(namespace, name string) *PodSelector {
 	return &PodSelector{
-		pods: l.c.CoreV1().Pods(namespace),
+		podClient: l.c.CoreV1().Pods(namespace),
+		name:      name,
 	}
 }
 

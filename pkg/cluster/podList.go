@@ -10,12 +10,12 @@ import (
 )
 
 type PodList struct {
-	pods        corev1.PodInterface
+	podClient   corev1.PodInterface
 	listOptions metav1.ListOptions
 }
 
 func (pl *PodList) Len(ctx context.Context, expected int) error {
-	list, err := pl.pods.List(ctx, pl.listOptions)
+	list, err := pl.podClient.List(ctx, pl.listOptions)
 	if err != nil {
 		return fmt.Errorf("could not list pods for listOptions %s: %w", pl.listOptions.String(), err)
 	}
@@ -30,35 +30,35 @@ func (pl *PodList) Len(ctx context.Context, expected int) error {
 
 // Raw queries the kubernetes API and returns the pod list as plain kubernetes API objects.
 func (pl *PodList) Raw(ctx context.Context) (*v1.PodList, error) {
-	return pl.pods.List(ctx, pl.listOptions)
+	return pl.podClient.List(ctx, pl.listOptions)
 }
 
-type PodSelector struct {
-	pods        corev1.PodInterface
+type PodListSelector struct {
+	podClient   corev1.PodInterface
 	listOptions metav1.ListOptions
 }
 
-func (s *PodSelector) ByLabels(labels string) *PodSelector {
-	ps := &PodSelector{
-		pods:        s.pods,
-		listOptions: s.listOptions,
+func (pls *PodListSelector) ByLabels(labels string) *PodListSelector {
+	ps := &PodListSelector{
+		podClient:   pls.podClient,
+		listOptions: pls.listOptions,
 	}
 	ps.listOptions.LabelSelector = labels
 	return ps
 }
 
-func (s *PodSelector) ByFieldSelector(fieldSelector string) *PodSelector {
-	ps := &PodSelector{
-		pods:        s.pods,
-		listOptions: s.listOptions,
+func (pls *PodListSelector) ByFieldSelector(fieldSelector string) *PodListSelector {
+	ps := &PodListSelector{
+		podClient:   pls.podClient,
+		listOptions: pls.listOptions,
 	}
 	ps.listOptions.FieldSelector = fieldSelector
 	return ps
 }
 
-func (s *PodSelector) List() *PodList {
+func (pls *PodListSelector) List() *PodList {
 	return &PodList{
-		pods:        s.pods,
-		listOptions: s.listOptions,
+		podClient:   pls.podClient,
+		listOptions: pls.listOptions,
 	}
 }
