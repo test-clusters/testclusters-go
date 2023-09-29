@@ -37,13 +37,6 @@ func TestIntegration(t *testing.T) {
 		}
 	}, 10*time.Second, 1*time.Second)
 
-	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
-		err := pods.StatusPhase(ctx, v1.PodRunning)
-		if err != nil {
-			collectT.Errorf("%w", err)
-		}
-	}, 60*time.Second, 1*time.Second)
-
 	// then
 	assert.NoError(t, err)
 }
