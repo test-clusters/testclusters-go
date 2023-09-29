@@ -2,6 +2,10 @@ module github.com/ppxl/testclusters-go
 
 go 1.21
 
+// set a fixed version for k8s.io/kubelet, beacause "https://github.com/rancher/wharfie" requires "k8s.io/kubelet v0.0.0"
+// which is no valid version
+replace k8s.io/kubelet => k8s.io/kubelet v0.28.2
+
 require (
 	github.com/cloudogu/k8s-apply-lib v0.4.2
 	github.com/k3d-io/k3d/v5 v5.6.0
