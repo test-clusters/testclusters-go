@@ -69,6 +69,11 @@ func setupCluster(t *testing.T) *K3dCluster {
 	}
 	l.Log().Info("testcluster-go: Cluster was successfully created")
 
+	err = cluster.waitForDefaultSACreation(ctx)
+	if err != nil {
+		t.Errorf("failed to wait for default service account: %s", err.Error())
+	}
+
 	return cluster
 }
 
@@ -265,6 +270,38 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 	}
 
 	return sa.Name, nil
+}
+
+func (c *K3dCluster) waitForDefaultSACreation(ctx context.Context) error {
+	errRetriable := true
+
+	err := retry.OnError(wait.Backoff{
+		Steps:    20,
+		Duration: 500 * time.Millisecond,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}, func(err error) bool {
+		return errRetriable
+	}, func() error {
+		clientset, err := c.ClientSet()
+		if err != nil {
+			errRetriable = false
+			return err
+		}
+
+		_, err = clientset.CoreV1().ServiceAccounts(DefaultNamespace).Get(ctx, "default", metav1.GetOptions{})
+		if err != nil {
+			l.Log().Info("testcluster-go: no default SA found")
+			return err
+		}
+		l.Log().Info("testcluster-go: found default SA")
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("waited too long for default SA: %w", err)
+	}
+	return nil
 }
 
 func handleStartError(ctx context.Context, cluster *K3dCluster, err error) error {
