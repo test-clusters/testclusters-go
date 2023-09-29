@@ -15,4 +15,5 @@
 vendor/
 target/
 .idea/
+*.iml
 .code
