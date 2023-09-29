@@ -313,21 +313,18 @@ func (c *K3dCluster) CtlKube(fieldManager string) (*YamlApplier, error) {
 }
 
 type PodList struct {
-	t           *testing.T
 	pods        corev1.PodInterface
 	listOptions metav1.ListOptions
 }
 
 func (pl *PodList) Eventually() *PodList {
 	return &PodList{
-		t:           pl.t,
 		pods:        pl.pods,
 		listOptions: pl.listOptions,
 	}
 }
 
 func (pl *PodList) Len(ctx context.Context, expected int) error {
-	pl.t.Helper()
 	list, err := pl.pods.List(ctx, pl.listOptions)
 	if err != nil {
 		return fmt.Errorf("could not list pods for listOptions %s: %w", pl.listOptions.String(), err)
@@ -347,8 +344,6 @@ func (pl *PodList) Raw(ctx context.Context) (*v1.PodList, error) {
 }
 
 func (pl *PodList) StatusPhase(ctx context.Context, expected v1.PodPhase) error {
-	pl.t.Helper()
-
 	list, err := pl.pods.List(ctx, pl.listOptions)
 	if err != nil {
 		return fmt.Errorf("could not list pods for listOptions %s: %s", pl.listOptions.String(), err.Error())
@@ -364,13 +359,11 @@ func (pl *PodList) StatusPhase(ctx context.Context, expected v1.PodPhase) error 
 }
 
 type PodSelector struct {
-	t    *testing.T
 	pods corev1.PodInterface
 }
 
 func (s *PodSelector) ByLabels(labels string) *PodList {
 	return &PodList{
-		t:    s.t,
 		pods: s.pods,
 		listOptions: metav1.ListOptions{
 			LabelSelector: labels,
@@ -385,7 +378,6 @@ type Lookout struct {
 
 func (l *Lookout) Pods(namespace string) *PodSelector {
 	return &PodSelector{
-		t:    l.t,
 		pods: l.c.CoreV1().Pods(namespace),
 	}
 }
