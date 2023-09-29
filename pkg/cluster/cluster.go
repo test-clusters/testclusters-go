@@ -30,8 +30,10 @@ const appName = "k8s-containers"
 const targetNamespace = "default"
 
 // k3s versions
+// warning: k3s versions are tagged with a `+` separator before `k3s1`, but k3s images use `-`.
 const (
 	K3sVersion1_26 = "v1.26.2-k3s1"
+	K3sVersion1_28 = "v1.28.2-k3s1"
 )
 
 type Cluster interface {
@@ -108,7 +110,7 @@ my.company.registry":
 		ObjectMeta: configTypes.ObjectMeta{
 			Name: clusterName,
 		},
-		Image:   fmt.Sprintf("%s:%s", k3dTypes.DefaultK3sImageRepo, K3sVersion1_26),
+		Image:   fmt.Sprintf("%s:%s", k3dTypes.DefaultK3sImageRepo, K3sVersion1_28),
 		Servers: 1,
 		Agents:  0,
 		Options: v1alpha5.SimpleConfigOptions{
