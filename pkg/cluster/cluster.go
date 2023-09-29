@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	l "github.com/k3d-io/k3d/v5/pkg/logger"
 	"k8s.io/client-go/rest"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/client"
 	"github.com/k3d-io/k3d/v5/pkg/config"
 	configTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
-	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha4"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/types"
 	"github.com/phayes/freeport"
@@ -40,7 +40,7 @@ type Cluster interface {
 
 type K3dCluster struct {
 	containerRuntime    runtimes.Runtime
-	clusterConfig       *v1alpha4.ClusterConfig
+	clusterConfig       *v1alpha5.ClusterConfig
 	kubeConfig          *api.Config
 	ClusterName         string
 	AdminServiceAccount string
@@ -89,7 +89,7 @@ func registerTearDown(t *testing.T, cluster *K3dCluster) {
 	})
 }
 
-func createClusterConfig(ctx context.Context, clusterName string) (*v1alpha4.ClusterConfig, error) {
+func createClusterConfig(ctx context.Context, clusterName string) (*v1alpha5.ClusterConfig, error) {
 	freeHostPort, err := freeport.GetFreePort()
 	if err != nil {
 		return nil, fmt.Errorf("could not find free port for port-forward: %w", err)
@@ -100,10 +100,10 @@ my.company.registry":
   endpoint:
   - http://my.company.registry:5000
 `
-	simpleConfig := v1alpha4.SimpleConfig{
+	simpleConfig := v1alpha5.SimpleConfig{
 		TypeMeta: configTypes.TypeMeta{
 			Kind:       "Simple",
-			APIVersion: "k3d.io/v1alpha4",
+			APIVersion: "k3d.io/v1alpha5",
 		},
 		ObjectMeta: configTypes.ObjectMeta{
 			Name: clusterName,
@@ -111,15 +111,15 @@ my.company.registry":
 		Image:   fmt.Sprintf("%s:%s", k3dTypes.DefaultK3sImageRepo, K3sVersion1_26),
 		Servers: 1,
 		Agents:  0,
-		Options: v1alpha4.SimpleConfigOptions{
-			K3dOptions: v1alpha4.SimpleConfigOptionsK3d{
+		Options: v1alpha5.SimpleConfigOptions{
+			K3dOptions: v1alpha5.SimpleConfigOptionsK3d{
 				Wait:    true,
 				Timeout: 60 * time.Second,
 			},
 		},
 		// allows unpublished images-under-test to be used in the cluster
-		Registries: v1alpha4.SimpleConfigRegistries{
-			Create: &v1alpha4.SimpleConfigRegistryCreateConfig{
+		Registries: v1alpha5.SimpleConfigRegistries{
+			Create: &v1alpha5.SimpleConfigRegistryCreateConfig{
 				//Name:	fmt.Sprintf("%s-%s-registry", k3dTypes.DefaultObjectNamePrefix, newCluster.Name),
 				// Host:    "0.0.0.0",
 				HostPort: k3dTypes.DefaultRegistryPort, // alternatively the string "random"
@@ -132,7 +132,7 @@ my.company.registry":
 			},
 			Config: k3sRegistryYaml,
 		},
-		ExposeAPI: v1alpha4.SimpleExposureOpts{
+		ExposeAPI: v1alpha5.SimpleExposureOpts{
 			HostPort: strconv.Itoa(freeHostPort),
 		},
 	}
