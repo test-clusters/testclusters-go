@@ -3,10 +3,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	l "github.com/k3d-io/k3d/v5/pkg/logger"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/rest"
 	"strconv"
 	"testing"
 	"time"
@@ -14,6 +10,8 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/client"
 	"github.com/k3d-io/k3d/v5/pkg/config"
 	configTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
+	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	l "github.com/k3d-io/k3d/v5/pkg/logger"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/types"
 	"github.com/phayes/freeport"
@@ -21,10 +19,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/ppxl/testclusters-go/pkg/naming"
+	"github.com/test-clusters/testclusters-go/pkg/naming"
 )
 
 const appName = "k8s-containers"
@@ -59,36 +59,26 @@ func NewK3dCluster(t *testing.T) *K3dCluster {
 }
 
 func setupCluster(t *testing.T) *K3dCluster {
-	l.Log().Info("===== =====")
 	l.Log().Info("testcluster-go: Creating cluster during  ")
-	l.Log().Info("===== =====")
 	var err error
 	cluster, err := CreateK3dCluster(context.Background(), "hello-world")
 	if err != nil {
 		t.Errorf("Unexpected error during test setup: %s\n", err)
 	}
-	l.Log().Info("===== =====")
 	l.Log().Info("testcluster-go: Cluster was successfully created")
-	l.Log().Info("===== =====")
 
 	return cluster
 }
 
 func registerTearDown(t *testing.T, cluster *K3dCluster) {
 	t.Cleanup(func() {
-		l.Log().Info("===== =====")
 		l.Log().Info("testcluster-go: Terminating cluster during test tear down")
-		l.Log().Info("===== =====")
 		err := cluster.Terminate(context.Background())
 		if err != nil {
-			l.Log().Info("===== =====")
 			l.Log().Info("testcluster-go: Cluster was termination failed")
-			l.Log().Info("===== =====")
 			t.Errorf("Unexpected error during test tear down: %s\n", err.Error())
 		}
-		l.Log().Info("===== =====")
 		l.Log().Info("testcluster-go: Cluster was successfully terminated")
-		l.Log().Info("===== =====")
 	})
 }
 
@@ -149,7 +139,7 @@ my.company.registry":
 		return nil, fmt.Errorf("failed to transform cluster config: %w", err)
 	}
 
-	println(fmt.Sprintf("===== used cluster config =====\n%#v\n===== =====", clusterConfig))
+	//println(fmt.Sprintf("===== used cluster config =====\n%#v\n===== =====", clusterConfig))
 
 	clusterConfig, err = config.ProcessClusterConfig(*clusterConfig)
 	if err != nil {
