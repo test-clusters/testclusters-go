@@ -3,7 +3,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	l "github.com/k3d-io/k3d/v5/pkg/logger"
+	"k8s.io/client-go/rest"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/k3d-io/k3d/v5/pkg/client"
@@ -15,7 +18,6 @@ import (
 	"github.com/phayes/freeport"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -25,6 +27,7 @@ import (
 )
 
 const appName = "k8s-containers"
+const targetNamespace = "default"
 
 // k3s versions
 const (
@@ -41,6 +44,49 @@ type K3dCluster struct {
 	kubeConfig          *api.Config
 	ClusterName         string
 	AdminServiceAccount string
+	clientConfig        *rest.Config
+}
+
+// NewK3dCluster creates a completely new cluster within the provided container engine. This method is the usual entry point of a test with testclusters-go.
+func NewK3dCluster(t *testing.T) *K3dCluster {
+	cluster := setupCluster(t)
+	registerTearDown(t, cluster)
+
+	return cluster
+}
+
+func setupCluster(t *testing.T) *K3dCluster {
+	l.Log().Info("===== =====")
+	l.Log().Info("testcluster-go: Creating cluster during  ")
+	l.Log().Info("===== =====")
+	var err error
+	cluster, err := CreateK3dCluster(context.Background(), "hello-world")
+	if err != nil {
+		t.Errorf("Unexpected error during test setup: %s\n", err)
+	}
+	l.Log().Info("===== =====")
+	l.Log().Info("testcluster-go: Cluster was successfully created")
+	l.Log().Info("===== =====")
+
+	return cluster
+}
+
+func registerTearDown(t *testing.T, cluster *K3dCluster) {
+	t.Cleanup(func() {
+		l.Log().Info("===== =====")
+		l.Log().Info("testcluster-go: Terminating cluster during test tear down")
+		l.Log().Info("===== =====")
+		err := cluster.Terminate(context.Background())
+		if err != nil {
+			l.Log().Info("===== =====")
+			l.Log().Info("testcluster-go: Cluster was termination failed")
+			l.Log().Info("===== =====")
+			t.Errorf("Unexpected error during test tear down: %s\n", err.Error())
+		}
+		l.Log().Info("===== =====")
+		l.Log().Info("testcluster-go: Cluster was successfully terminated")
+		l.Log().Info("===== =====")
+	})
 }
 
 func createClusterConfig(ctx context.Context, clusterName string) (*v1alpha4.ClusterConfig, error) {
@@ -74,7 +120,7 @@ my.company.registry":
 		// allows unpublished images-under-test to be used in the cluster
 		Registries: v1alpha4.SimpleConfigRegistries{
 			Create: &v1alpha4.SimpleConfigRegistryCreateConfig{
-				// Name:	fmt.Sprintf("%s-%s-registry", k3dTypes.DefaultObjectNamePrefix, newCluster.Name),
+				//Name:	fmt.Sprintf("%s-%s-registry", k3dTypes.DefaultObjectNamePrefix, newCluster.Name),
 				// Host:    "0.0.0.0",
 				HostPort: k3dTypes.DefaultRegistryPort, // alternatively the string "random"
 				// Image:    fmt.Sprintf("%s:%s", k3dTypes.DefaultRegistryImageRepo, k3dTypes.DefaultRegistryImageTag),
@@ -92,24 +138,26 @@ my.company.registry":
 	}
 
 	if err := config.ProcessSimpleConfig(&simpleConfig); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("processing simple cluster config failed: %w", err)
 	}
 
 	clusterConfig, err := config.TransformSimpleToClusterConfig(ctx, runtimes.SelectedRuntime, simpleConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to transform cluster config: %w", err)
 	}
+
+	println(fmt.Sprintf("===== used cluster config =====\n%#v\n===== =====", clusterConfig))
 
 	clusterConfig, err = config.ProcessClusterConfig(*clusterConfig)
 	if err != nil {
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("processing cluster config failed: %w", err)
 		}
 	}
 
 	if err = config.ValidateClusterConfig(ctx, runtimes.SelectedRuntime, *clusterConfig); err != nil {
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed cluster config validation: %w", err)
 		}
 	}
 
@@ -144,15 +192,18 @@ func CreateK3dCluster(ctx context.Context, clusterNamePrefix string) (*K3dCluste
 	if err != nil {
 		return cluster, handleStartError(ctx, cluster, err)
 	}
+	println(fmt.Sprintf("===== retrieved kube config ====\n%#v\n===== =====", cluster.kubeConfig))
 
 	sa, err := createDefaultRBACForSA(ctx, cluster)
+	if err != nil {
+		return cluster, handleStartError(ctx, cluster, fmt.Errorf("failed to create default RBAC for SA: %w", err))
+	}
 	cluster.AdminServiceAccount = sa
 
 	return cluster, nil
 }
 
 func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) {
-	const targetNamespace = "default"
 	const globalGalacticClusterAdminSuffix = "ford-prefect"
 
 	clientSet, err := c.ClientSet()
@@ -242,11 +293,15 @@ func (c *K3dCluster) Terminate(ctx context.Context) error {
 
 // ClientSet returns a K8s clientset which allows to interoperate with the cluster K8s API.
 func (c *K3dCluster) ClientSet() (*kubernetes.Clientset, error) {
+	if c.kubeConfig == nil {
+		panic("cluster kubeConfig went unexpectedly nil")
+	}
 	intermediateConfig := clientcmd.NewDefaultClientConfig(*c.kubeConfig, nil)
 	clientConfig, err := intermediateConfig.ClientConfig()
 	if err != nil {
 		return nil, err
 	}
+	c.clientConfig = clientConfig
 
 	clientSet, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
@@ -256,48 +311,10 @@ func (c *K3dCluster) ClientSet() (*kubernetes.Clientset, error) {
 	return clientSet, nil
 }
 
-func (c *K3dCluster) Kubectl(ctx context.Context) (*KubeCtl, error) {
-	clientSet, err := c.ClientSet()
+func (c *K3dCluster) CtlKube(fieldManager string) (*YamlApplier, error) {
+	yamlApplier, err := NewYamlApplier(c.clientConfig, fieldManager, targetNamespace)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ctlkube call failed: %w", err)
 	}
-
-	const kubectlPodName = "kubectl-pod"
-	kubeCtlPod, err := clientSet.CoreV1().Pods("default").Get(ctx, kubectlPodName, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-
-	if apierrors.IsNotFound(err) {
-		trueish := true
-		kubeCtlPod = &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubectlPodName,
-				Namespace: "default",
-				Labels:    map[string]string{"k3s.creator": appName},
-			},
-			Spec: v1.PodSpec{
-				Containers: []v1.Container{{
-					Name:    kubectlPodName,
-					Image:   "bitnami/kubectl:1.26.2",
-					Command: []string{"sleep infinity"},
-				}},
-				AutomountServiceAccountToken: &trueish,
-				ServiceAccountName:           c.AdminServiceAccount,
-			},
-			Status: v1.PodStatus{},
-		}
-
-		kubeCtlPod, err = clientSet.CoreV1().Pods("default").Create(ctx, kubeCtlPod, metav1.CreateOptions{})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	coreV1Client := clientSet.CoreV1().RESTClient()
-
-	return &KubeCtl{
-		pod:             kubeCtlPod,
-		commandExecutor: NewCommandExecutor(clientSet, coreV1Client),
-	}, nil
+	return yamlApplier, nil
 }
