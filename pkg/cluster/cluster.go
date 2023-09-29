@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	l "github.com/k3d-io/k3d/v5/pkg/logger"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"strconv"
 	"testing"
@@ -319,4 +320,88 @@ func (c *K3dCluster) CtlKube(fieldManager string) (*YamlApplier, error) {
 		return nil, fmt.Errorf("ctlkube call failed: %w", err)
 	}
 	return yamlApplier, nil
+}
+
+type PodList struct {
+	t           *testing.T
+	pods        corev1.PodInterface
+	listOptions metav1.ListOptions
+}
+
+func (pl *PodList) Eventually() *PodList {
+	return &PodList{
+		t:           pl.t,
+		pods:        pl.pods,
+		listOptions: pl.listOptions,
+	}
+}
+
+func (pl *PodList) Len(ctx context.Context, expected int) error {
+	pl.t.Helper()
+	list, err := pl.pods.List(ctx, pl.listOptions)
+	if err != nil {
+		return fmt.Errorf("could not list pods for listOptions %s: %s", pl.listOptions.String(), err.Error())
+	}
+
+	itemsLen := len(list.Items)
+	if itemsLen != expected {
+		return fmt.Errorf("did not find expected number of pods. expected; %d; actual: %d", expected, itemsLen)
+	}
+
+	return nil
+}
+
+func (pl *PodList) StatusPhase(ctx context.Context, expected v1.PodPhase) error {
+	pl.t.Helper()
+	list, err := pl.pods.List(ctx, pl.listOptions)
+	if err != nil {
+		return fmt.Errorf("could not list pods for listOptions %s: %s", pl.listOptions.String(), err.Error())
+	}
+
+	for _, pod := range list.Items {
+		if pod.Status.Phase != expected {
+			return fmt.Errorf("pod %s is not in expected lifecycle-pahase. expected; %s; actual: %s", pod.Name, expected, pod.Status.Phase)
+		}
+	}
+
+	return nil
+}
+
+type PodSelector struct {
+	t    *testing.T
+	pods corev1.PodInterface
+}
+
+func (s *PodSelector) ByLabels(labels string) *PodList {
+	return &PodList{
+		t:    s.t,
+		pods: s.pods,
+		listOptions: metav1.ListOptions{
+			LabelSelector: labels,
+		},
+	}
+}
+
+type Lookout struct {
+	t *testing.T
+	c kubernetes.Interface
+}
+
+func (l *Lookout) Pods(namespace string) *PodSelector {
+	return &PodSelector{
+		t:    l.t,
+		pods: l.c.CoreV1().Pods(namespace),
+	}
+}
+
+func (c *K3dCluster) Lookout(t *testing.T) *Lookout {
+	clientSet, err := c.ClientSet()
+	if err != nil {
+		t.Errorf("could not build clientSet for cluster: %s", err.Error())
+	}
+
+	return &Lookout{
+		t: t,
+		c: clientSet,
+	}
 }

@@ -3,9 +3,7 @@ package cluster
 import (
 	"context"
 	_ "embed"
-	"fmt"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 	"time"
 
@@ -35,34 +33,23 @@ func TestExample(t *testing.T) {
 	l.Log().Info("apply yaml bytes")
 	l.Log().Info("===== =====")
 	err = kubectl.ApplyWithFile(ctx, simpleNginxDeploymentBytes)
-	c, err := cluster.ClientSet()
+	//c, err := cluster.ClientSet()
 	require.NoError(t, err)
 
-	leMsg := "asdf"
-	assert.Eventuallyf(t, func() bool {
-		list, err := c.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
-			LabelSelector: "app=nginx",
-		})
+	pods := cluster.Lookout(t).Pods("default").ByLabels("app=nginx")
+	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
+		err := pods.Len(ctx, 3)
 		if err != nil {
-			leMsg = fmt.Sprintf("not pods with labels %s found", "app=nginx")
-			println("not yet app=nginx seletect")
-			return false
+			collectT.Errorf("%w", err)
 		}
-		if len(list.Items) < 1 {
-			leMsg = fmt.Sprintf("pod list empty for labels %s", "app=nginx")
-			println("pod list empty app=nginx")
-			return false
-		}
+	}, 10*time.Second, 1*time.Second)
 
-		if list.Items[0].Status.Phase != v1.PodRunning {
-			leMsg = fmt.Sprintf("pod phase not running %s is in %s", list.Items[0].Name, list.Items[0].Status.Phase)
-			println("pod phase not running app=nginx", list.Items[0].Name)
-			return false
+	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
+		err := pods.StatusPhase(ctx, v1.PodRunning)
+		if err != nil {
+			collectT.Errorf("%w", err)
 		}
-
-		return true
-	}, 5*time.Second, 1*time.Second, leMsg)
-	assert.Equal(t, "qwer", leMsg)
+	}, 60*time.Second, 1*time.Second)
 
 	l.Log().Info("===== =====")
 	l.Log().Infof("apply yaml bytes with result %v", err)
