@@ -9,7 +9,7 @@
   - :note: do you want to debug containers? It does not have to be containers :note:
 - apply kubernetes resources at cluster start-up time
   - simplify repeated tasks
-- kubectl usage
+- kubectl-like applying of kubernetes YAML resources thanks to the Cloudogu [apply-lib](https://github.com/cloudogu/k8s-apply-lib)
   - do you want to have resources? Because that's how you get resources
 - Enable external access to cluster pods
   - Loadbalancer/ingress testing

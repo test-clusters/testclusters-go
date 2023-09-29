@@ -1,4 +1,4 @@
-module github.com/ppxl/testclusters-go
+module github.com/test-clusters/testclusters-go
 
 go 1.21
 

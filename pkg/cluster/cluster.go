@@ -3,9 +3,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	l "github.com/k3d-io/k3d/v5/pkg/logger"
-	"k8s.io/client-go/rest"
 	"strconv"
 	"testing"
 	"time"
@@ -13,21 +10,26 @@ import (
 	"github.com/k3d-io/k3d/v5/pkg/client"
 	"github.com/k3d-io/k3d/v5/pkg/config"
 	configTypes "github.com/k3d-io/k3d/v5/pkg/config/types"
+	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	l "github.com/k3d-io/k3d/v5/pkg/logger"
 	"github.com/k3d-io/k3d/v5/pkg/runtimes"
 	k3dTypes "github.com/k3d-io/k3d/v5/pkg/types"
 	"github.com/phayes/freeport"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/retry"
 
-	"github.com/ppxl/testclusters-go/pkg/naming"
+	"github.com/test-clusters/testclusters-go/pkg/naming"
 )
 
 const appName = "k8s-containers"
-const targetNamespace = "default"
+const DefaultNamespace = "default"
 
 // k3s versions
 // warning: k3s versions are tagged with a `+` separator before `k3s1`, but k3s images use `-`.
@@ -58,36 +60,32 @@ func NewK3dCluster(t *testing.T) *K3dCluster {
 }
 
 func setupCluster(t *testing.T) *K3dCluster {
-	l.Log().Info("===== =====")
 	l.Log().Info("testcluster-go: Creating cluster during  ")
-	l.Log().Info("===== =====")
 	var err error
-	cluster, err := CreateK3dCluster(context.Background(), "hello-world")
+	ctx := context.Background()
+	cluster, err := CreateK3dCluster(ctx, "hello-world")
 	if err != nil {
 		t.Errorf("Unexpected error during test setup: %s\n", err)
 	}
-	l.Log().Info("===== =====")
 	l.Log().Info("testcluster-go: Cluster was successfully created")
-	l.Log().Info("===== =====")
+
+	err = cluster.waitForDefaultSACreation(ctx)
+	if err != nil {
+		t.Errorf("failed to wait for default service account: %s", err.Error())
+	}
 
 	return cluster
 }
 
 func registerTearDown(t *testing.T, cluster *K3dCluster) {
 	t.Cleanup(func() {
-		l.Log().Info("===== =====")
-		l.Log().Info("testcluster-go: Terminating cluster during test tear down")
-		l.Log().Info("===== =====")
+		l.Log().Debug("testcluster-go: Terminating cluster during test tear down")
 		err := cluster.Terminate(context.Background())
 		if err != nil {
-			l.Log().Info("===== =====")
 			l.Log().Info("testcluster-go: Cluster was termination failed")
-			l.Log().Info("===== =====")
 			t.Errorf("Unexpected error during test tear down: %s\n", err.Error())
 		}
-		l.Log().Info("===== =====")
 		l.Log().Info("testcluster-go: Cluster was successfully terminated")
-		l.Log().Info("===== =====")
 	})
 }
 
@@ -148,7 +146,7 @@ my.company.registry":
 		return nil, fmt.Errorf("failed to transform cluster config: %w", err)
 	}
 
-	println(fmt.Sprintf("===== used cluster config =====\n%#v\n===== =====", clusterConfig))
+	l.Log().Debugf("===== used cluster config =====\n%#v\n===== =====", clusterConfig)
 
 	clusterConfig, err = config.ProcessClusterConfig(*clusterConfig)
 	if err != nil {
@@ -194,7 +192,7 @@ func CreateK3dCluster(ctx context.Context, clusterNamePrefix string) (*K3dCluste
 	if err != nil {
 		return cluster, handleStartError(ctx, cluster, err)
 	}
-	println(fmt.Sprintf("===== retrieved kube config ====\n%#v\n===== =====", cluster.kubeConfig))
+	l.Log().Debugf("testcluster-go: ===== retrieved kube config ====\n%#v\n===== =====", cluster.kubeConfig)
 
 	sa, err := createDefaultRBACForSA(ctx, cluster)
 	if err != nil {
@@ -216,12 +214,12 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 	sa := &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sa-" + globalGalacticClusterAdminSuffix,
-			Namespace: targetNamespace,
+			Namespace: DefaultNamespace,
 			Labels:    map[string]string{"k3s.creator": appName},
 		},
 	}
 
-	sa, err = clientSet.CoreV1().ServiceAccounts(targetNamespace).Create(ctx, sa, metav1.CreateOptions{})
+	sa, err = clientSet.CoreV1().ServiceAccounts(DefaultNamespace).Create(ctx, sa, metav1.CreateOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -229,7 +227,7 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 	clusterRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cr-" + globalGalacticClusterAdminSuffix,
-			Namespace: targetNamespace,
+			Namespace: DefaultNamespace,
 			Labels:    map[string]string{"k3s.creator": appName},
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -249,7 +247,7 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "crb-" + globalGalacticClusterAdminSuffix,
-			Namespace: targetNamespace,
+			Namespace: DefaultNamespace,
 			Labels:    map[string]string{"k3s.creator": appName},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -261,7 +259,7 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 			{
 				Kind:      rbacv1.ServiceAccountKind,
 				Name:      sa.Name,
-				Namespace: targetNamespace,
+				Namespace: DefaultNamespace,
 			},
 		},
 	}
@@ -274,10 +272,42 @@ func createDefaultRBACForSA(ctx context.Context, c *K3dCluster) (string, error) 
 	return sa.Name, nil
 }
 
+func (c *K3dCluster) waitForDefaultSACreation(ctx context.Context) error {
+	errRetriable := true
+
+	err := retry.OnError(wait.Backoff{
+		Steps:    20,
+		Duration: 500 * time.Millisecond,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}, func(err error) bool {
+		return errRetriable
+	}, func() error {
+		clientset, err := c.ClientSet()
+		if err != nil {
+			errRetriable = false
+			return err
+		}
+
+		_, err = clientset.CoreV1().ServiceAccounts(DefaultNamespace).Get(ctx, "default", metav1.GetOptions{})
+		if err != nil {
+			l.Log().Info("testcluster-go: no default SA found")
+			return err
+		}
+		l.Log().Info("testcluster-go: found default SA")
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("waited too long for default SA: %w", err)
+	}
+	return nil
+}
+
 func handleStartError(ctx context.Context, cluster *K3dCluster, err error) error {
 	err2 := cluster.Terminate(ctx)
 	if err2 != nil {
-		fmt.Printf("Another error '%s' occurred during an error: %s", err2.Error(), err)
+		l.Log().Errorf("Another error '%s' occurred while terminating the cluster due to the original error (you may want to clean-up the container landscape): %s", err2.Error(), err)
 	}
 
 	return err
@@ -314,9 +344,40 @@ func (c *K3dCluster) ClientSet() (*kubernetes.Clientset, error) {
 }
 
 func (c *K3dCluster) CtlKube(fieldManager string) (*YamlApplier, error) {
-	yamlApplier, err := NewYamlApplier(c.clientConfig, fieldManager, targetNamespace)
+	yamlApplier, err := NewYamlApplier(c.clientConfig, fieldManager, DefaultNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("ctlkube call failed: %w", err)
 	}
 	return yamlApplier, nil
+}
+
+type Lookout struct {
+	t *testing.T
+	c kubernetes.Interface
+}
+
+func (l *Lookout) Pods(namespace string) *PodListSelector {
+	return &PodListSelector{
+		podClient: l.c.CoreV1().Pods(namespace),
+	}
+}
+
+func (l *Lookout) Pod(namespace, name string) *PodSelector {
+	return &PodSelector{
+		podClient:   l.c.CoreV1().Pods(namespace),
+		eventClient: l.c.CoreV1().Events(namespace),
+		name:        name,
+	}
+}
+
+func (c *K3dCluster) Lookout(t *testing.T) *Lookout {
+	clientSet, err := c.ClientSet()
+	if err != nil {
+		t.Errorf("could not build clientSet for cluster: %s", err.Error())
+	}
+
+	return &Lookout{
+		t: t,
+		c: clientSet,
+	}
 }

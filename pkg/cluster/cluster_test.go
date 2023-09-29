@@ -1,39 +1,59 @@
-package cluster
+package cluster_test
 
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"testing"
-
-	l "github.com/k3d-io/k3d/v5/pkg/logger"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/test-clusters/testclusters-go/pkg/cluster"
 )
 
 //go:embed testdata/simpleNginxDeployment.yaml
 var simpleNginxDeploymentBytes []byte
 
-func TestExample(t *testing.T) {
+//go:embed testdata/simpleEchoPod.yaml
+var simpleEchoPodBytes []byte
 
-	cluster := NewK3dCluster(t)
-
+func TestIntegration(t *testing.T) {
 	// given
+	cl := cluster.NewK3dCluster(t)
 	ctx := context.Background()
-	l.Log().Info("===== =====")
-	l.Log().Info("get kubectl")
-	l.Log().Info("===== =====")
-	kubectl, err := cluster.CtlKube(t.Name())
+
+	kubectl, err := cl.CtlKube(t.Name())
 	require.NoError(t, err)
 
 	// when
-	l.Log().Info("===== =====")
-	l.Log().Info("apply yaml bytes")
-	l.Log().Info("===== =====")
 	err = kubectl.ApplyWithFile(ctx, simpleNginxDeploymentBytes)
-	l.Log().Info("===== =====")
-	l.Log().Infof("apply yaml bytes with result %v", err)
-	l.Log().Info("===== =====")
+	require.NoError(t, err)
+	err = kubectl.ApplyWithFile(ctx, simpleEchoPodBytes)
+	require.NoError(t, err)
+
+	lookout := cl.Lookout(t)
+
+	pods := lookout.Pods(cluster.DefaultNamespace).ByLabels("app=nginx").ByFieldSelector("status.phase=Running").List()
+	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
+		err := pods.Len(ctx, 3)
+		if err != nil {
+			collectT.Errorf("%w", err)
+		}
+	}, 60*time.Second, 1*time.Second)
+
+	podList, err := pods.Raw(ctx)
+	require.NoError(t, err)
+
+	events, err := cl.Lookout(t).Pod(cluster.DefaultNamespace, podList.Items[0].Name).Events(ctx)
+	require.NoError(t, err)
+	fmt.Printf("%#v", events)
+
+	actualLogs, err := cl.Lookout(t).Pod(cluster.DefaultNamespace, "echo-pod").Logs(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "hello world\n", string(actualLogs))
 
 	// then
 	assert.NoError(t, err)
