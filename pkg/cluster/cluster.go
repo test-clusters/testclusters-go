@@ -330,19 +330,25 @@ func (pl *PodList) Len(ctx context.Context, expected int) error {
 	pl.t.Helper()
 	list, err := pl.pods.List(ctx, pl.listOptions)
 	if err != nil {
-		return fmt.Errorf("could not list pods for listOptions %s: %s", pl.listOptions.String(), err.Error())
+		return fmt.Errorf("could not list pods for listOptions %s: %w", pl.listOptions.String(), err)
 	}
 
 	itemsLen := len(list.Items)
 	if itemsLen != expected {
-		return fmt.Errorf("did not find expected number of pods. expected; %d; actual: %d", expected, itemsLen)
+		return fmt.Errorf("did not find expected number of pods: expected: %d; actual: %d", expected, itemsLen)
 	}
 
 	return nil
 }
 
+// Raw queries the kubernetes API and returns the pod list as plain kubernetes API objects.
+func (pl *PodList) Raw(ctx context.Context) (*v1.PodList, error) {
+	return pl.pods.List(ctx, pl.listOptions)
+}
+
 func (pl *PodList) StatusPhase(ctx context.Context, expected v1.PodPhase) error {
 	pl.t.Helper()
+
 	list, err := pl.pods.List(ctx, pl.listOptions)
 	if err != nil {
 		return fmt.Errorf("could not list pods for listOptions %s: %s", pl.listOptions.String(), err.Error())
