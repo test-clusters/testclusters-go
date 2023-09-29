@@ -324,8 +324,9 @@ func (l *Lookout) Pods(namespace string) *PodListSelector {
 
 func (l *Lookout) Pod(namespace, name string) *PodSelector {
 	return &PodSelector{
-		podClient: l.c.CoreV1().Pods(namespace),
-		name:      name,
+		podClient:   l.c.CoreV1().Pods(namespace),
+		eventClient: l.c.CoreV1().Events(namespace),
+		name:        name,
 	}
 }
 

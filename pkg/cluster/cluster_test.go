@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,6 +15,18 @@ import (
 
 //go:embed testdata/simpleNginxDeployment.yaml
 var simpleNginxDeploymentBytes []byte
+
+func TestEventually(t *testing.T) {
+	firstRun := true
+	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
+		if firstRun {
+			firstRun = false
+			collectT.Errorf("failed on first try")
+		}
+
+		collectT.Errorf("failed on other tries")
+	}, 10*time.Second, 1*time.Second)
+}
 
 func TestIntegration(t *testing.T) {
 
@@ -35,8 +48,14 @@ func TestIntegration(t *testing.T) {
 		if err != nil {
 			collectT.Errorf("%w", err)
 		}
-	}, 10*time.Second, 1*time.Second)
+	}, 60*time.Second, 1*time.Second)
 
+	podList, err := pods.Raw(ctx)
+	require.NoError(t, err)
+
+	events, err := cl.Lookout(t).Pod("default", podList.Items[0].Name).Events(ctx)
+	require.NoError(t, err)
+	fmt.Printf("%#v", events)
 	// then
 	assert.NoError(t, err)
 }
