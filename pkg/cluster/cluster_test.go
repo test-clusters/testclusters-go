@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
 
 	"github.com/test-clusters/testclusters-go/pkg/cluster"
 )
@@ -30,7 +29,7 @@ func TestIntegration(t *testing.T) {
 	//c, err := cluster.ClientSet()
 	require.NoError(t, err)
 
-	pods := cl.Lookout(t).Pods("default").ByLabels("app=nginx")
+	pods := cl.Lookout(t).Pods("default").ByLabels("app=nginx").ByFieldSelector("status.phase=Running").List()
 	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
 		err := pods.Len(ctx, 3)
 		if err != nil {
