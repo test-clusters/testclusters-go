@@ -16,20 +16,10 @@ import (
 //go:embed testdata/simpleNginxDeployment.yaml
 var simpleNginxDeploymentBytes []byte
 
-func TestEventually(t *testing.T) {
-	firstRun := true
-	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
-		if firstRun {
-			firstRun = false
-			collectT.Errorf("failed on first try")
-		}
-
-		collectT.Errorf("failed on other tries")
-	}, 10*time.Second, 1*time.Second)
-}
+//go:embed testdata/simpleEchoPod.yaml
+var simpleEchoPodBytes []byte
 
 func TestIntegration(t *testing.T) {
-
 	// given
 	cl := cluster.NewK3dCluster(t)
 	ctx := context.Background()
@@ -39,10 +29,13 @@ func TestIntegration(t *testing.T) {
 
 	// when
 	err = kubectl.ApplyWithFile(ctx, simpleNginxDeploymentBytes)
-	//c, err := cluster.ClientSet()
+	require.NoError(t, err)
+	err = kubectl.ApplyWithFile(ctx, simpleEchoPodBytes)
 	require.NoError(t, err)
 
-	pods := cl.Lookout(t).Pods("default").ByLabels("app=nginx").ByFieldSelector("status.phase=Running").List()
+	lookout := cl.Lookout(t)
+
+	pods := lookout.Pods(cluster.DefaultNamespace).ByLabels("app=nginx").ByFieldSelector("status.phase=Running").List()
 	assert.EventuallyWithT(t, func(collectT *assert.CollectT) {
 		err := pods.Len(ctx, 3)
 		if err != nil {
@@ -53,9 +46,15 @@ func TestIntegration(t *testing.T) {
 	podList, err := pods.Raw(ctx)
 	require.NoError(t, err)
 
-	events, err := cl.Lookout(t).Pod("default", podList.Items[0].Name).Events(ctx)
+	events, err := cl.Lookout(t).Pod(cluster.DefaultNamespace, podList.Items[0].Name).Events(ctx)
 	require.NoError(t, err)
 	fmt.Printf("%#v", events)
+
+	actualLogs, err := cl.Lookout(t).Pod(cluster.DefaultNamespace, "echo-pod").Logs(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "hello world\n", string(actualLogs))
+
 	// then
 	assert.NoError(t, err)
 }

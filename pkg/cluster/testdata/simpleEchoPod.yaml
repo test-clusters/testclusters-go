@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: echo-pod
+  labels:
+    app: echo-pod
+spec:
+  containers:
+    - name: alpine
+      image: alpine:latest
+      command:
+        - echo
+      args:
+        - "hello"
+        - "world"
